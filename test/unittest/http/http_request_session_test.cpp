@@ -172,6 +172,31 @@ TEST_CASE("HTTP request snapshots are immutable and checked", "[httpfs][request-
 	REQUIRE(after_invalidation.current.snapshot->type == HTTPRequestSnapshotType::HTTP);
 }
 
+TEST_CASE("HTTP request snapshots turn bearer_token into an Authorization header", "[httpfs][request-session]") {
+	ClientLifecycle lifecycle;
+	TrackingHTTPUtil http_util(lifecycle);
+	auto params = CreateParams(http_util);
+	params.bearer_token = "secret-token";
+
+	auto snapshot = make_shared_ptr<HTTPRequestSnapshot>(params);
+	auto request = snapshot->CreateRequest();
+	REQUIRE(request.headers.GetHeaderValue("Authorization") == "Bearer secret-token");
+
+	HTTPHeaders caller_headers;
+	caller_headers["authorization"] = "Basic abc";
+	auto caller_request = snapshot->CreateRequest(std::move(caller_headers));
+	REQUIRE(caller_request.headers.GetHeaderValue("Authorization") == "Basic abc");
+
+	params.extra_headers["Authorization"] = "Custom xyz";
+	auto extra_snapshot = make_shared_ptr<HTTPRequestSnapshot>(params);
+	auto extra_request = extra_snapshot->CreateRequest();
+	REQUIRE(extra_request.headers.GetHeaderValue("Authorization") == "Custom xyz");
+
+	auto no_token_snapshot = make_shared_ptr<HTTPRequestSnapshot>(CreateParams(http_util));
+	auto no_token_request = no_token_snapshot->CreateRequest();
+	REQUIRE_FALSE(no_token_request.headers.HasHeader("Authorization"));
+}
+
 TEST_CASE("HTTP transport retries bypass the client cache", "[httpfs][request-session]") {
 	ClientLifecycle lifecycle;
 	TrackingHTTPUtil http_util(lifecycle);

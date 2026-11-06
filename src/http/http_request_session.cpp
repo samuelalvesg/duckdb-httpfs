@@ -30,6 +30,12 @@ HTTPSessionRequest HTTPRequestSnapshot::CreateRequest(HTTPHeaders headers) const
 	for (const auto &header : configured_headers.extra_headers) {
 		headers[header.first] = header.second;
 	}
+	// The curl and httplib clients turn bearer_token into an Authorization header themselves. Clients that only
+	// forward these merged headers (DuckDB-Wasm) never saw it. A header set by the caller or by extra_http_headers wins.
+	// S3 requests sign their own Authorization, so they are left alone.
+	if (type == HTTPRequestSnapshotType::HTTP && !params.bearer_token.empty() && !headers.HasHeader("Authorization")) {
+		headers.Insert("Authorization", "Bearer " + params.bearer_token);
+	}
 	return {std::move(headers), std::move(request_params), std::move(configured_headers)};
 }
 
